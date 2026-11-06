@@ -1,0 +1,9 @@
+import { Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { C, Icon, MenuRow, Page, s } from '@/components/design';
+import { useApp } from '@/context/AppContext';
+import { t } from '@/i18n';
+export default function Profile() {
+  const { profile, conversations, language } = useApp();
+  return <Page title="Your farming corner."><View style={[s.card, { alignItems: 'center', backgroundColor: C.sage, padding: 28 }]}><View style={{ width: 74, height: 74, borderRadius: 24, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center' }}><Icon name="person-outline" size={34} color="white" /></View><Text style={s.h2}>{profile?.name}</Text><Text style={s.body}>{profile?.village || t('Add your village in settings', language)}</Text><Text style={s.label}>{t('FARMER ACCOUNT', language)}</Text><Text style={s.small}>{profile?.farming.map(item => t(item, language)).join(' · ') || t('Your farming interests', language)}</Text></View><View style={s.between}><Text style={s.body}>{conversations.length} {t('conversations', language)}</Text><Text style={s.body}>{conversations.filter(c => c.saved).length} {t('saved', language)}</Text></View><View style={s.card}><MenuRow title="Profile & preferences" subtitle="Your details, language and motion" icon="settings-outline" onPress={() => router.push('/settings')} /><MenuRow title="My plan" subtitle="Account access and available plans" icon="ribbon-outline" onPress={() => router.push('/plans')} /><MenuRow title="Help & support" subtitle="FAQs, contact and resources" icon="help-buoy-outline" onPress={() => router.push('/support')} /><MenuRow title="How it works" icon="bulb-outline" onPress={() => router.push('/how-it-works')} /><MenuRow title="About Prani Mitra" icon="leaf-outline" onPress={() => router.push('/about')} /></View></Page>;
+}

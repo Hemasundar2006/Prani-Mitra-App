@@ -1,0 +1,41 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "testing": {
+      "environment": "preview",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://prani-mitra-backend1.onrender.com/api",
+        "EXPO_PUBLIC_GEMINI_TOKEN_URL": "https://prani-mitra-backend1.onrender.com/api/assistant/live-token",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "366b656e7768353133353138",
+        "EXPO_PUBLIC_MSG91_TOKEN_AUTH": "463998TprsEJYXKrZ6aece43dP1"
+      }
+    },
+    "production": {
+      "environment": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://prani-mitra-backend1.onrender.com/api",
+        "EXPO_PUBLIC_GEMINI_TOKEN_URL": "https://prani-mitra-backend1.onrender.com/api/assistant/live-token",
+        "EXPO_PUBLIC_MSG91_WIDGET_ID": "366b656e7768353133353138",
+        "EXPO_PUBLIC_MSG91_TOKEN_AUTH": "463998TprsEJYXKrZ6aece43dP1"
+      }
+    },
+    "production-apk": {
+      "extends": "production",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
