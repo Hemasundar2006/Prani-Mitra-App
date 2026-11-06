@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -19,6 +20,9 @@
         "EXPO_PUBLIC_MSG91_WIDGET_ID": "366b656e7768353133353138",
         "EXPO_PUBLIC_MSG91_TOKEN_AUTH": "463998TprsEJYXKrZ6aece43dP1"
       }
+    },
+    "preview": {
+      "extends": "testing"
     },
     "production": {
       "environment": "production",
