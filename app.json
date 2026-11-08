@@ -8,7 +8,12 @@
     "scheme": "pranimitra",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Allow Prani Mitra to access your microphone for voice conversations.",
+        "NSLocationWhenInUseUsageDescription": "Allow Prani Mitra to find nearby emergency support contacts.",
+        "NSUserNotificationUsageDescription": "Allow Prani Mitra to send daily farming reminders."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +25,10 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "package": "com.marothihemasundar03.pranimitra"
     },
@@ -40,6 +48,12 @@
       ],
       "expo-secure-store",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Prani Mitra to use your location to find nearby veterinarians and support contacts."
+        }
+      ],
+      [
         "expo-audio",
         {
           "microphonePermission": "Allow Prani Mitra to record your farming question.",
@@ -50,6 +64,7 @@
       ],
       "expo-asset",
       "expo-sharing"
+      ,"expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,

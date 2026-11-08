@@ -7,6 +7,8 @@ export type ApiCall = { _id?: string; topic?: string; query?: { text?: string };
 export type ApiPlan = { id?: string; _id?: string; name: string; price: number; currency?: string; billingCycle?: string; features?: string[]; isPopular?: boolean };
 export type ApiSubscription = { status?: string; planId?: string; planName?: string; startDate?: string; endDate?: string };
 export type ApiContent = { id?: string; _id?: string; question?: string; title?: string; answer?: string; body?: string; content?: string };
+export type EmergencyContact = { name: string; phone: string; distanceKm: number | null; category: string };
+export type RecordingAnalysis = { id: string; language: string; service: string; transcript: string; summary: string; immediateAction?: string; urgency: 'normal' | 'warning' | 'urgent'; response?: string; contacts?: EmergencyContact[]; audioBase64?: string | null; audioFormat?: string; audioSampleRate?: number; duration?: number; createdAt: string };
 async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
@@ -38,4 +40,6 @@ export const api = {
   async weather(token: string) { return request<{ location?: { name?: string }; temp?: { current?: number; unit?: string }; description?: string }>('/users/weather/current', {}, token); },
   async initiateCall(token: string, data: Record<string, unknown>) { return request<{ callId: string; status: string; tollFreeNumber: string }>('/calls/initiate', body(data), token); },
   async contact(data: { name: string; phone?: string; email?: string; category: string; subject: string; message: string }) { return request('/contact', body(data)); },
+  async analyzeRecording(token: string, data: { audioBase64: string; language: string; service: string; duration?: number }) { return request<RecordingAnalysis>('/assistant/analyze-recording', body(data), token); },
+  async recordingAnalyses(token: string) { const result = await request<RecordingAnalysis[] | { items?: RecordingAnalysis[]; analyses?: RecordingAnalysis[] }>('/assistant/recordings', {}, token); return Array.isArray(result) ? result : result.items ?? result.analyses ?? []; },
 };

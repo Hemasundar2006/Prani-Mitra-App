@@ -1,0 +1,9 @@
+import { Modal, Text, TouchableOpacity, View } from 'react-native';
+import { Action, C, Icon, s, openExternal } from '@/components/design';
+import { EmergencyContact } from '@/services/api';
+import { Language } from '@/data/content';
+import { t } from '@/i18n';
+
+export function UrgencyContactsModal({ visible, contacts, language, onClose }: { visible: boolean; contacts: EmergencyContact[]; language: Language; onClose: () => void }) {
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={{ flex: 1, justifyContent: 'center', padding: 22, backgroundColor: '#132E2577' }}><View style={[s.card, { maxWidth: 620, width: '100%', alignSelf: 'center', backgroundColor: C.white }]}><View style={s.between}><View style={{ flex: 1 }}><Text style={s.h2}>{t('Immediate help available', language)}</Text><Text style={s.body}>{t('Please contact a verified nearby service.', language)}</Text></View><Icon name="warning-outline" color={C.red} size={30} /></View>{contacts.length ? contacts.map((contact, index) => <View key={`${contact.phone}-${index}`} style={[s.card, { padding: 14, borderRadius: 16 }]}><Text style={s.h3}>{contact.name}</Text><Text style={s.body}>{contact.phone}{contact.distanceKm !== null && contact.distanceKm !== undefined ? ` · ${contact.distanceKm} km` : ''}</Text><Action title="Call now" icon="call-outline" onPress={() => { void openExternal(`tel:${contact.phone}`); }} /></View>) : <Text style={s.body}>{t('No verified emergency contacts are available right now.', language)}</Text>}<TouchableOpacity accessibilityRole="button" onPress={onClose} style={{ minHeight: 48, alignItems: 'center', justifyContent: 'center' }}><Text style={[s.h3, { color: C.green }]}>{t('Close', language)}</Text></TouchableOpacity></View></View></Modal>;
+}

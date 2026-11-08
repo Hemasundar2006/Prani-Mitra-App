@@ -17,7 +17,7 @@ function Navigation() {
   return <><StatusBar style="dark" /><Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'fade', contentStyle: { backgroundColor: C.bg } }}>
     <Stack.Protected guard={!profile} redirectTo="/(tabs)/home"><Stack.Screen name="index" /><Stack.Screen name="login" /><Stack.Screen name="register" /><Stack.Screen name="forgot-password" /></Stack.Protected>
     <Stack.Protected guard={!!profile} redirectTo="/login">
-      <Stack.Screen name="welcome" /><Stack.Screen name="(tabs)" /><Stack.Screen name="service/[id]" /><Stack.Screen name="chat" /><Stack.Screen name="voice" /><Stack.Screen name="conversation/[id]" /><Stack.Screen name="call" /><Stack.Screen name="settings" /><Stack.Screen name="plans" />
+      <Stack.Screen name="welcome" /><Stack.Screen name="(tabs)" /><Stack.Screen name="service/[id]" /><Stack.Screen name="chat" /><Stack.Screen name="voice" /><Stack.Screen name="recording-analysis" /><Stack.Screen name="analysis-history" /><Stack.Screen name="conversation/[id]" /><Stack.Screen name="call" /><Stack.Screen name="settings" /><Stack.Screen name="plans" />
     </Stack.Protected>
     <Stack.Screen name="support" /><Stack.Screen name="about" /><Stack.Screen name="how-it-works" /><Stack.Screen name="resources" /><Stack.Screen name="article/[id]" />
   </Stack><DotTransition /></>;

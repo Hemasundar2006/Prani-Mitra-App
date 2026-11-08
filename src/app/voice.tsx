@@ -11,6 +11,8 @@ import { arrayBufferToBase64, combineBase64Chunks, createRealtimeSocket, Realtim
 import { createVoicePlayback } from '@/services/voicePlayback';
 import { mono16k } from '@/utils/voicePcm';
 import { t } from '@/i18n';
+import { api, RecordingAnalysis } from '@/services/api';
+import { UrgencyContactsModal } from '@/components/UrgencyContactsModal';
 
 const topics: { label: string; id: ServiceId; icon: string }[] = [
   { label: 'Animal health', id: 'animal-health', icon: 'paw-outline' }, { label: 'Crops', id: 'farming', icon: 'leaf-outline' },
@@ -39,10 +41,12 @@ export default function Voice() {
   const [status, setStatus] = useState<Status>('idle'); const [partial, setPartial] = useState(''); const [transcript, setTranscript] = useState<string[]>([]); const [answer, setAnswer] = useState(''); const [error, setError] = useState(''); const [audioChunks, setAudioChunks] = useState(0);
   const socket = useRef<ReturnType<typeof createRealtimeSocket> | null>(null); const active = useRef(false);
   const session = useRef(0); const lastFrame = useRef(0); const lastServerEvent = useRef(0); const awaitingAnswer = useRef(0); const nextAnswer = useRef(true); const ending = useRef(false); const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const analysisStarted = useRef(false); const callStartedAt = useRef(0);
   const [playback] = useState(() => createVoicePlayback(setError));
   const recordedPcm = useRef<ArrayBuffer[]>([]);
   const [recordedBytes, setRecordedBytes] = useState(0);
   const [savingRecording, setSavingRecording] = useState(false);
+  const [analysis, setAnalysis] = useState<RecordingAnalysis | null>(null); const [analyzing, setAnalyzing] = useState(false); const [showContacts, setShowContacts] = useState(false);
   const replyAudioChunks = useRef<string[]>([]);
   const replySampleRate = useRef(24000);
   const streamRef = useRef<ReturnType<typeof useAudioStream>['stream'] | null>(null);
@@ -96,17 +100,27 @@ export default function Voice() {
         playback.enqueue({ type: 'audio', audio, format: 'pcm16', sampleRate: replySampleRate.current, channels: 1 }, () => { if (active.current) setStatus('listening'); });
       }
       nextAnswer.current = true;
-      if (ending.current) { ending.current = false; if (endTimer.current) clearTimeout(endTimer.current); endTimer.current = null; socket.current?.close(); setStatus('ended'); }
+      if (ending.current) { ending.current = false; if (endTimer.current) clearTimeout(endTimer.current); endTimer.current = null; socket.current?.close(); setStatus('ended'); void analyzeRecording(); }
       else setStatus(hasReplyAudio ? 'speaking' : 'listening');
     }
     else if (type === 'error') fail(event.message ?? 'The assistant could not continue.');
+  }
+  async function analyzeRecording() {
+    if (analysisStarted.current || !app.token || !recordedPcm.current.length) return;
+    analysisStarted.current = true; setAnalyzing(true);
+    try {
+      const bytes = recordedPcm.current.reduce((out, item) => { const next = new Uint8Array(out.byteLength + item.byteLength); next.set(new Uint8Array(out)); next.set(new Uint8Array(item), out.byteLength); return next.buffer; }, new ArrayBuffer(0));
+      const result = await api.analyzeRecording(app.token, { audioBase64: arrayBufferToBase64(bytes), language: app.language, service: topic, duration: Math.round((Date.now() - callStartedAt.current) / 1000) });
+      setAnalysis(result); if ((result.urgency === 'warning' || result.urgency === 'urgent') && result.contacts?.length) setShowContacts(true);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not analyze the recording.'); }
+    finally { setAnalyzing(false); }
   }
   async function start() {
     if (active.current || status === 'connecting') return;
     if (!app.token) { setError('Please sign in before starting a voice conversation.'); setStatus('error'); return; }
     const epoch = ++session.current;
     socket.current?.close(); playback.stop(); ending.current = false; if (endTimer.current) clearTimeout(endTimer.current); endTimer.current = null;
-    setError(''); setPartial(''); setTranscript([]); setAnswer(''); setAudioChunks(0); recordedPcm.current = []; replyAudioChunks.current = []; setRecordedBytes(0); setStatus('connecting');
+    setError(''); setPartial(''); setTranscript([]); setAnswer(''); setAnalysis(null); setShowContacts(false); setAnalyzing(false); analysisStarted.current = false; setAudioChunks(0); recordedPcm.current = []; replyAudioChunks.current = []; setRecordedBytes(0); setStatus('connecting');
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync(); if (!permission.granted) throw new Error('Allow microphone access to start a live conversation.');
       if (epoch !== session.current) return;
@@ -116,7 +130,7 @@ export default function Voice() {
       socket.current = createRealtimeSocket(app.token, event => { if (epoch === session.current) handleEvent(event); }, message => { if (epoch === session.current) fail(message); });
       await socket.current.start(app.language, topic);
       if (epoch !== session.current) return;
-      active.current = true;
+      active.current = true; callStartedAt.current = Date.now();
       lastFrame.current = Date.now(); lastServerEvent.current = Date.now(); awaitingAnswer.current = 0; nextAnswer.current = true;
       await stream.start();
       if (epoch !== session.current || !active.current) { stream.stop(); return; }
@@ -126,10 +140,13 @@ export default function Voice() {
   function stop() {
     if (ending.current) return;
     active.current = false; stream?.stop(); ending.current = true; setStatus('processing');
+    // Start analysis from the audio already captured even if the backend closes
+    // without sending turn.complete. analysisStarted prevents duplicate requests.
+    void analyzeRecording();
     if (!socket.current?.send({ type: 'stop' })) { ending.current = false; socket.current?.close(); setStatus('ended'); return; }
     endTimer.current = setTimeout(() => { if (ending.current) fail('Gemini Live did not finish the voice turn. Please retry.'); }, 30000);
   }
-  function reset() { session.current++; active.current = false; ending.current = false; if (endTimer.current) clearTimeout(endTimer.current); endTimer.current = null; stream?.stop(); socket.current?.close(); playback.stop(); recordedPcm.current = []; replyAudioChunks.current = []; setRecordedBytes(0); setSavingRecording(false); setStatus('idle'); setPartial(''); setTranscript([]); setAnswer(''); setError(''); setAudioChunks(0); }
+  function reset() { session.current++; active.current = false; ending.current = false; analysisStarted.current = false; setShowContacts(false); if (endTimer.current) clearTimeout(endTimer.current); endTimer.current = null; stream?.stop(); socket.current?.close(); playback.stop(); recordedPcm.current = []; replyAudioChunks.current = []; setRecordedBytes(0); setSavingRecording(false); setAnalyzing(false); setAnalysis(null); setStatus('idle'); setPartial(''); setTranscript([]); setAnswer(''); setError(''); setAudioChunks(0); }
   async function downloadRecording() {
     if (!recordedPcm.current.length || savingRecording) return;
     setSavingRecording(true);
@@ -149,15 +166,19 @@ export default function Voice() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save the voice recording.'); }
     finally { setSavingRecording(false); }
   }
-  return <Page back title="Talk with Mitra" subtitle="Speak naturally and see the conversation live.">
+  return <Page back title={status === 'idle' ? 'Talk with Mitra' : 'Prani Mitra'} subtitle={status === 'idle' ? 'Speak naturally and see the conversation live.' : 'Live voice conversation'}>
     {status === 'idle' ? <><Text style={s.h2}>{t('Choose a topic', app.language)}</Text><View style={[s.row, { flexWrap: 'wrap' }]}>{topics.map(item => <TouchableOpacity key={item.id} accessibilityRole="radio" accessibilityState={{ checked: topic === item.id }} onPress={() => setTopic(item.id)} style={[s.row, { width: '47%', minHeight: 62, flexGrow: 1, padding: 12, borderRadius: 14, backgroundColor: topic === item.id ? C.green : C.sage }]}><Icon name={item.icon} color={topic === item.id ? C.white : C.green} size={20} /><Text style={[s.small, { color: topic === item.id ? C.white : C.text, fontWeight: '700', flex: 1 }]}>{t(item.label, app.language)}</Text></TouchableOpacity>)}</View><View style={[s.card, { backgroundColor: C.sage }]}><Text style={s.h2}>{t('Ready to start?', app.language)}</Text><Text style={s.body}>{t('Language:', app.language)} {app.language}{'\n'}{t('Service:', app.language)} {t(topics.find(item => item.id === topic)?.label, app.language)}</Text><Action title="Start conversation" icon="mic-outline" onPress={start} /></View></> : <>
-      <View style={[s.card, { alignItems: 'center', backgroundColor: status === 'listening' ? C.sage : C.white }]}><Icon name={status === 'listening' ? 'mic' : 'mic-outline'} color={status === 'error' ? C.red : C.green} size={48} /><Text style={s.h2}>{t(status === 'connecting' ? 'Connecting to Gemini Live…' : status === 'listening' ? 'Live call · Listening…' : status === 'processing' ? 'Finishing your turn…' : status === 'speaking' ? 'Mitra is replying…' : status === 'ended' ? 'Call ended' : 'Ready', app.language)}</Text><Text style={[s.body, { textAlign: 'center' }]}>{partial || t('Speak naturally. Your words and Mitra’s response will appear here.', app.language)}</Text>{status === 'listening' ? <Text style={s.small}>{t('Microphone frames sent:', app.language)} {audioChunks}</Text> : null}<Text style={[s.small, { color: C.green }]}>{t('Gemini Live', app.language)}</Text></View>
+      <View style={[s.card, { paddingVertical: 12, backgroundColor: C.dark }]}><View style={s.between}><View style={s.row}><View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: C.sage, alignItems: 'center', justifyContent: 'center' }}><Icon name="sparkles-outline" color={C.green} size={23} /></View><View><Text style={[s.h3, { color: C.white }]}>Prani Mitra</Text><Text style={{ color: '#C5D9CD' }}>{t(status === 'speaking' ? 'Mitra is replying…' : status === 'ended' ? 'Call ended' : 'Listening live…', app.language)}</Text></View></View>{status !== 'ended' && <TouchableOpacity accessibilityRole="button" onPress={stop} style={{ borderWidth: 1, borderColor: '#C5D9CD', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9 }}><Text style={{ color: C.white, fontWeight: '700' }}>{t('End live call', app.language)}</Text></TouchableOpacity>}</View></View>
+      <View style={[s.card, { minHeight: 420, alignItems: 'center', justifyContent: 'center', backgroundColor: '#24191D', borderColor: '#3C2D31', paddingHorizontal: 28 }]}><View style={{ width: 92, height: 92, borderRadius: 46, backgroundColor: '#8A4708', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}><Text style={{ color: C.white, fontSize: 54, fontWeight: '300' }}>P</Text></View><Text style={[s.h2, { color: '#F8E7E8', textAlign: 'center' }]}>Prani Mitra</Text><Text style={{ color: '#D6C0C3', marginTop: 6 }}>{t(status === 'connecting' ? 'Connecting to Gemini Live…' : status === 'listening' ? 'Live call · Listening…' : status === 'processing' ? 'Finishing your turn…' : status === 'speaking' ? 'Mitra is replying…' : status === 'ended' ? 'Call ended' : 'Ready', app.language)}</Text><Text style={{ color: '#F8E7E8', fontSize: 18, lineHeight: 28, textAlign: 'center', marginTop: 28 }}>{partial || answer || t('Speak naturally. Your words and Mitra’s response will appear here.', app.language)}</Text></View>
       {transcript.map((line, index) => <View key={`${line}-${index}`} style={s.card}><Text style={s.body}>{line}</Text></View>)}
       {answer ? <View style={[s.card, { backgroundColor: '#F1F7FF' }]}><Text style={s.label}>PRANI MITRA</Text><Text style={s.body}>{answer}</Text></View> : null}
+      {analyzing ? <View style={s.card}><Text style={s.h3}>{t('Analyzing…', app.language)}</Text><Text style={s.body}>{t('Your call is being summarized and checked for immediate action.', app.language)}</Text></View> : null}
+      {analysis ? <View style={[s.card, { backgroundColor: analysis.urgency === 'urgent' ? '#FCEAE7' : C.sage }]}><Text style={s.label}>{t('Summary', app.language)}</Text><Text style={s.body}>{analysis.summary}</Text><Text style={s.label}>{t('Immediate action', app.language)}</Text><Text style={s.body}>{analysis.immediateAction || t('No immediate action detected.', app.language)}</Text><Text style={[s.small, { color: analysis.urgency === 'urgent' ? C.red : C.green }]}>{t(analysis.urgency === 'urgent' ? 'Urgent' : analysis.urgency === 'warning' ? 'Warning' : 'Normal', app.language)}</Text></View> : null}
       {error ? <Text accessibilityRole="alert" style={[s.body, { color: C.red }]}>{t(error, app.language)}</Text> : null}
       {status === 'error' ? <Action title="Try again" icon="refresh-outline" onPress={start} /> : status === 'processing' ? <Action title="Finishing call…" secondary disabled onPress={() => {}} /> : status !== 'ended' ? <Action title="End live call" secondary icon="call-outline" onPress={stop} /> : <Action title="New live call" onPress={reset} />}
       {recordedBytes > 0 ? <Action title={savingRecording ? 'Preparing recording…' : `${t('Download your voice recording', app.language)} (${Math.ceil(recordedBytes / 32000)} ${t('sec', app.language)})`} secondary icon="download-outline" disabled={savingRecording} onPress={downloadRecording} /> : null}
       <View style={[s.card, { backgroundColor: '#FFFDF5' }]}><Text style={s.label}>{t('YOU SAID', app.language)}</Text>{transcript.length || partial ? <>{transcript.filter(line => line.startsWith(`${t('You:', app.language)} `)).map((line, index) => <Text key={`${line}-${index}`} style={s.body}>{line.slice(`${t('You:', app.language)} `.length)}</Text>)}{partial ? <Text style={[s.body, { color: C.green }]}>{partial}</Text> : null}</> : <Text style={s.small}>{t('Your recognized speech will appear here.', app.language)}</Text>}</View>
     </>}
+    <UrgencyContactsModal visible={showContacts} contacts={analysis?.contacts ?? []} language={app.language} onClose={() => setShowContacts(false)} />
   </Page>;
 }
